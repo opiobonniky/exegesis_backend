@@ -1,0 +1,47 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/src/generated/prisma
+.yarn.lock
+.yarn/*
+.DS_Store
+dist
+build
+coverage
+*.log
+yarn.lock
+bun.lockb
+.yarn
+
+# Local development files
+/local-dev/*    
+
+# VSCode settings
+.vscode/*
+
+# backend build files
+/exegesis-backend/dist
+/exegesis-backend/node_modules
+
+# yarn
+yarn.lock
+bun.lockb
+.yarn/*
+yarn
+
+
+# Android SDK tools
+*.zip
+commandlinetools-*.zip
+android/sdk/
+android/ndk/
+android/cmake/
+.gradle/
+node_modules/
+
+# logs
+*.log
+
+# env
+.env

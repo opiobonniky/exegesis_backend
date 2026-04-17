@@ -1,0 +1,336 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SystemUser {
+  id                           String    @id @default(uuid())
+  firstName                    String    @map("first_name")
+  lastName                     String    @map("last_name")
+  middleName                   String?   @map("middle_name")
+  dateOfBirth                  DateTime? @map("date_of_birth")
+  gender                       String
+  maritalStatus                String?   @map("marital_status")
+  email                        String    @unique
+  phoneNumber                  String    @map("phone_number")
+  alternativePhone             String?   @map("alternative_phone")
+  addressId                    Int?      @map("address_id")
+  ministryGroup                String?   @map("ministry_group")
+  servicePosition              String?   @map("service_position")
+  spiritualGifts               String?   @map("spiritual_gifts")
+  emergencyContactName         String?   @map("emergency_contact_name")
+  emergencyContactPhone        String?   @map("emergency_contact_phone")
+  emergencyContactRelationship String?   @map("emergency_contact_relationship")
+  username                     String    @unique
+  password                     String
+  profilePhotoUrl              String?   @map("profile_photo_url")
+  loginCount                   BigInt    @default(0) @map("login_count")
+  status                       Boolean   @default(true)
+  lastLogin                    DateTime? @map("last_login")
+  emailVerified                Boolean   @default(false) @map("email_verified")
+  isLoggedIn                   Boolean   @default(false) @map("is_logged_in")
+  sessionId                    String?   @map("session_id")
+  userRole                     BigInt?   @map("user_role")
+  createdOn                    DateTime  @default(now()) @map("created_on")
+  updatedOn                    DateTime  @updatedAt @map("updated_on")
+  createdBy                    String?   @map("created_by")
+  updatedBy                    String?   @map("updated_by")
+
+  activities         Activity[]
+  readHistories      ReadHistory[]
+  favorites          Favorite[]
+  highlights         Highlight[]
+  notes              Note[]
+  userPlanProgresses UserPlanProgress[]
+  userQuizAnswers    UserQuizAnswer[]
+  verifications      Verification[]
+  messages           Message[]
+
+  @@map("system_users")
+}
+
+model Role {
+  id              BigInt    @id @default(autoincrement())
+  roleName        String    @unique @map("role_name")
+  roleDescription String    @map("role_description")
+  createdBy       String?   @map("created_by")
+  createdOn       DateTime? @map("created_on")
+  updatedBy       String?   @map("updated_by")
+  updatedOn       DateTime? @map("updated_on")
+
+  @@map("role")
+}
+
+model Activity {
+  id            BigInt    @id @default(autoincrement())
+  userId        String    @map("user_id")
+  username      String?
+  email         String?
+  loggedInAt    DateTime  @default(now()) @map("logged_in_at")
+  loggedOutAt   DateTime? @map("logged_out_at")
+  success       Boolean   @default(true)
+  failureReason String?   @map("failure_reason")
+  ip            String?
+  userAgent     String?   @map("user_agent")
+  browserName   String?   @map("browser_name")
+  os            String?
+  deviceType    String?   @map("device_type")
+  deviceName    String?   @map("device_name")
+  engine        String?
+  locale        String?
+
+  user SystemUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([loggedInAt])
+  @@index([ip])
+  @@map("activity")
+}
+
+model Verification {
+  id               BigInt   @id @default(autoincrement())
+  code             String
+  verificationType String   @map("verification_type")
+  emailAddress     String?  @map("email_address")
+  createdBy        String?  @map("created_by")
+  createdOn        DateTime @default(now()) @map("created_on")
+  expiresAt        DateTime @map("expires_at")
+  status           Boolean  @default(false)
+
+  user SystemUser? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@map("verification")
+}
+
+model DailyVerse {
+  id          BigInt    @id @default(autoincrement())
+  bookName    String    @map("book_name")
+  chapter     BigInt
+  verseNumber BigInt    @map("verse_number")
+  displayDate DateTime  @map("display_date")
+  displayTime DateTime? @map("display_time")
+  reflection  String?
+  createdBy   String    @map("created_by")
+  createdOn   DateTime  @default(now()) @map("created_on")
+  updatedBy   String?   @map("updated_by")
+  updatedOn   DateTime  @updatedAt @map("updated_on")
+  isPublished Boolean   @default(false) @map("is_published")
+
+  @@map("daily_verse")
+}
+
+model ReadHistory {
+  id          BigInt    @id @default(autoincrement())
+  bookName    String    @map("book_name")
+  chapter     BigInt
+  verseNumber BigInt    @map("verse_number")
+  createdBy   String?   @map("created_by")
+  createdOn   DateTime? @map("created_on")
+  updatedBy   String?   @map("updated_by")
+  updatedOn   DateTime? @map("updated_on")
+
+  user SystemUser? @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@unique([createdBy, bookName, chapter, verseNumber])
+  @@map("read_history")
+}
+
+model Favorite {
+  id          BigInt    @id @default(autoincrement())
+  bookName    String    @map("book_name")
+  chapter     BigInt
+  verseNumber BigInt    @map("verse_number")
+  createdBy   String?   @map("created_by")
+  createdOn   DateTime? @map("created_on")
+  updatedBy   String?   @map("updated_by")
+  updatedOn   DateTime? @map("updated_on")
+
+  user SystemUser? @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@unique([createdBy, bookName, chapter, verseNumber])
+  @@map("favorite")
+}
+
+model Highlight {
+  id          BigInt    @id @default(autoincrement())
+  bookName    String    @map("book_name")
+  chapter     BigInt
+  verseNumber BigInt    @map("verse_number")
+  colorId     BigInt    @map("color_id")
+  note        String?
+  createdBy   String?   @map("created_by")
+  createdOn   DateTime? @map("created_on")
+  updatedBy   String?   @map("updated_by")
+  updatedOn   DateTime? @map("updated_on")
+
+  user SystemUser? @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("high_lights")
+}
+
+model Note {
+  id          BigInt    @id @default(autoincrement())
+  bookName    String    @map("book_name")
+  chapter     BigInt
+  verseNumber BigInt    @map("verse_number")
+  note        String?
+  createdBy   String?   @map("created_by")
+  createdOn   DateTime? @map("created_on")
+  updatedBy   String?   @map("updated_by")
+  updatedOn   DateTime? @map("updated_on")
+
+  user SystemUser? @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@unique([createdBy, bookName, chapter, verseNumber])
+  @@map("note")
+}
+
+model VerseExplanation {
+  id           BigInt    @id @default(autoincrement())
+  bookName     String    @map("book_name")
+  chapter      BigInt
+  verseNumber  BigInt    @map("verse_number")
+  explanation  String?
+  learnMore    String?   @map("learn_more")
+  bibleVersion String?   @map("bible_version")
+  createdBy    String?   @map("created_by")
+  createdOn    DateTime? @map("created_on")
+  updatedBy    String?   @map("updated_by")
+  updatedOn    DateTime? @map("updated_on")
+
+  @@unique([bookName, chapter, verseNumber])
+  @@map("verse_explanations")
+}
+
+model Message {
+  id            BigInt    @id @default(autoincrement())
+  message       String
+  recipient     String
+  subject       String?
+  attachment    String?
+  attachmentTwo String?   @map("attachment_two")
+  sendCount     BigInt    @default(0) @map("send_count")
+  failCount     Int       @default(0) @map("fail_count")
+  maxRetries    Int       @default(3) @map("max_retries")
+  lastError     String?   @map("last_error")
+  status        String    @default("PENDING")
+  sentOn        DateTime? @map("sent_on")
+  createdBy     String?   @map("created_by")
+  createdOn     DateTime? @map("created_on")
+  updatedBy     String?   @map("updated_by")
+  updatedOn     DateTime? @map("updated_on")
+
+  user SystemUser? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@map("messages")
+}
+
+model ReadingPlan {
+  id               BigInt    @id @default(autoincrement())
+  planId           String    @unique
+  title            String
+  description      String?
+  totalDays        Int       @map("total_days")
+  questionsEnabled Boolean   @default(false) @map("questions_enabled")
+  category         String?
+  difficulty       String?
+  isActive         Boolean   @default(true) @map("is_active")
+  createdBy        String?   @map("created_by")
+  createdOn        DateTime? @map("created_on")
+  updatedBy        String?   @map("updated_by")
+  updatedOn        DateTime? @map("updated_on")
+
+  dailyAssignments DailyAssignment[]
+  quizQuestions    QuizQuestion[]
+  userPlanProgress UserPlanProgress[]
+
+  @@map("reading_plans")
+}
+
+model DailyAssignment {
+  id                  BigInt    @id @default(autoincrement())
+  planId              String    @map("plan_id")
+  dayNumber           Int       @map("day_number")
+  title               String?
+  chaptersJson        String    @map("chapters_json")
+  reflectionQuestions String?   @map("reflection_questions")
+  createdBy           String?   @map("created_by")
+  createdOn           DateTime? @map("created_on")
+  updatedBy           String?   @map("updated_by")
+  updatedOn           DateTime? @map("updated_on")
+
+  readingPlan ReadingPlan? @relation(fields: [planId], references: [planId], onDelete: Cascade)
+
+  @@index([planId])
+  @@map("daily_assignments")
+}
+
+model QuizQuestion {
+  id            BigInt    @id @default(autoincrement())
+  planId        String    @map("plan_id")
+  dayNumber     Int       @map("day_number")
+  question      String
+  optionsJson   String    @map("options_json")
+  correctAnswer Int       @map("correct_answer")
+  explanation   String?
+  createdBy     String?   @map("created_by")
+  createdOn     DateTime? @map("created_on")
+  updatedBy     String?   @map("updated_by")
+  updatedOn     DateTime? @map("updated_on")
+
+  readingPlan ReadingPlan? @relation(fields: [planId], references: [planId], onDelete: Cascade)
+
+  @@index([planId])
+  @@map("quiz_questions")
+}
+
+model UserPlanProgress {
+  id                BigInt    @id @default(autoincrement())
+  userId            String    @map("user_id")
+  planId            String    @map("plan_id")
+  startDate         DateTime  @map("start_date")
+  completedDaysJson String?   @map("completed_days_json")
+  lastCompletedDate DateTime? @map("last_completed_date")
+  streak            Int       @default(0)
+  isCompleted       Boolean   @default(false) @map("is_completed")
+  completedDate     DateTime? @map("completed_date")
+  createdBy         String?   @map("created_by")
+  createdOn         DateTime? @map("created_on")
+  updatedBy         String?   @map("updated_by")
+  updatedOn         DateTime? @map("updated_on")
+
+  user        SystemUser?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readingPlan ReadingPlan? @relation(fields: [planId], references: [planId], onDelete: Cascade)
+
+  @@unique([userId, planId])
+  @@index([userId])
+  @@index([planId])
+  @@map("user_plan_progress")
+}
+
+model UserQuizAnswer {
+  id            BigInt    @id @default(autoincrement())
+  userId        String    @map("user_id")
+  planId        String    @map("plan_id")
+  dayNumber     Int       @map("day_number")
+  questionId    BigInt    @map("question_id")
+  userAnswer    Int       @map("user_answer")
+  isCorrect     Boolean   @map("is_correct")
+  createdBy     String?   @map("created_by")
+  createdOn     DateTime? @map("created_on")
+  updatedBy     String?   @map("updated_by")
+  updatedOn     DateTime? @map("updated_on")
+  numberAttempt Int?      @map("number_attempt")
+
+  user SystemUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+  @@index([userId])
+  @@index([planId])
+  @@map("user_quiz_answers")
+}

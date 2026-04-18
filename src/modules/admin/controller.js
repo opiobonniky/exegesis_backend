@@ -13,11 +13,17 @@ export const getUsersByAdmin = async (req, res) => {
 
 export const updateUser = async (req, res) => {
   try {
-    const result = await adminService.updateUser(req.body, req.user.id);
+    const adminId = req.user.id;
+    console.log("updateUser - adminId type:", typeof adminId, "value:", adminId);
+    const bodyStr = JSON.stringify(req.body, (k, v) => typeof v === "bigint" ? v.toString() : v);
+    console.log("updateUser - body:", bodyStr);
+    const result = await adminService.updateUser(req.body, adminId);
+    console.log("updateUser result - status:", result.status, "message:", result.message, "hasData:", !!result.data);
     return res.status(result.status).json(formatApiResponse(result));
   } catch (error) {
     console.error("Update user error:", error);
-    return res.status(500).json(formatApiResponse({ status: 500, message: "Error updating user: " + error.message }));
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return res.status(500).json(formatApiResponse({ status: 500, message: "Error updating user: " + errorMsg }));
   }
 };
 

@@ -32,7 +32,7 @@ app.use(
       "http://localhost:3000",
       "http://localhost:8080",
       "http://localhost:5001",
-      "https://exegesis-ixrb.onrender.com",
+      "https://exegesis-new.onrender.com",
       process.env.CLIENT_URL,
     ].filter(Boolean),
     credentials: true,

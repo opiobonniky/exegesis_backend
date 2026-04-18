@@ -47,6 +47,20 @@ export const formatResponse = (status, message, data = null) => {
   return response;
 };
 
+const serializeValue = (val) => {
+  if (val === null || val === undefined) return val;
+  if (typeof val === "bigint") return val.toString();
+  if (Array.isArray(val)) return val.map(serializeValue);
+  if (typeof val === "object") {
+    const result = {};
+    for (const key of Object.keys(val)) {
+      result[key] = serializeValue(val[key]);
+    }
+    return result;
+  }
+  return val;
+};
+
 export const formatApiResponse = (serviceResponse) => {
   const { status, message, data } = serviceResponse;
   const response = {
@@ -54,7 +68,7 @@ export const formatApiResponse = (serviceResponse) => {
     returnMessage: message,
   };
   if (data !== undefined && data !== null) {
-    response.returnData = data;
+    response.returnData = serializeValue(data);
   }
   return response;
 };

@@ -92,9 +92,9 @@ export const updateUser = async (data, adminId) => {
   }
   if (roleName) {
     const roleNameLower = roleName.trim().toLowerCase();
-    updateData.userRole = roleId || (roleNameLower === "admin" ? 1n : 2n);
+    updateData.userRole = roleId ? BigInt(roleId) : (roleNameLower === "admin" ? 1n : 2n);
   } else if (roleId) {
-    updateData.userRole = roleId;
+    updateData.userRole = BigInt(roleId);
   }
   if (status !== undefined) updateData.status = status;
 
@@ -107,7 +107,15 @@ export const updateUser = async (data, adminId) => {
   });
 
   updatedUser.password = null;
-  return { status: 200, message: "User updated successfully", data: updatedUser };
+  const serializeUser = (u) => {
+    const serialized = {};
+    for (const key of Object.keys(u)) {
+      const value = u[key];
+      serialized[key] = typeof value === "bigint" ? value.toString() : value;
+    }
+    return serialized;
+  };
+  return { status: 200, message: "User updated successfully", data: serializeUser(updatedUser) };
 };
 
 export const deleteUser = async (data, adminId) => {

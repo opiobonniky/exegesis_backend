@@ -136,10 +136,10 @@ export const getReadHistory = async (data, userId) => {
 };
 
 export const deleteReadHistory = async (data, userId) => {
-  const { historyId } = data;
-  if (!historyId) return { status: 400, message: "History ID is required" };
+  const { readHistoryIds } = data;
+  if (!readHistoryIds || !Array.isArray(readHistoryIds)) return { status: 400, message: "Read history IDs are required" };
 
-  await prisma.readHistory.delete({ where: { id: BigInt(historyId), createdBy: userId } });
+  await prisma.readHistory.deleteMany({ where: { id: { in: readHistoryIds.map(BigInt) }, createdBy: userId } });
   return { status: 200, message: "Read history deleted successfully" };
 };
 
@@ -399,10 +399,125 @@ export const getHomeStats = async (userId) => {
   return { status: 200, message: "Home stats fetched successfully", data: { highlightCount, favoriteCount, noteCount, readHistoryCount, planProgressCount } };
 };
 
+export const getRecentActivity = async (userId, limit = 10) => {
+  const limitNum = Math.min(parseInt(limit) || 10, 20);
+
+  const [recentReads, recentHighlights, recentNotes, recentFavorites, planProgress] = await Promise.all([
+    prisma.readHistory.findMany({
+      where: { createdBy: userId },
+      take: limitNum,
+      orderBy: { createdOn: "desc" },
+    }),
+    prisma.highlight.findMany({
+      where: { createdBy: userId },
+      take: limitNum,
+      orderBy: { createdOn: "desc" },
+    }),
+    prisma.note.findMany({
+      where: { createdBy: userId },
+      take: limitNum,
+      orderBy: { createdOn: "desc" },
+    }),
+    prisma.favorite.findMany({
+      where: { createdBy: userId },
+      take: limitNum,
+      orderBy: { createdOn: "desc" },
+    }),
+    prisma.userPlanProgress.findMany({
+      where: { userId },
+      include: { readingPlan: true },
+      orderBy: { lastCompletedDate: "desc" },
+      take: 3,
+    }),
+  ]);
+
+  const serializeBigInt = (val) => {
+    if (val === null || val === undefined) return val;
+    if (typeof val === "bigint") return Number(val);
+    if (Array.isArray(val)) return val.map(serializeBigInt);
+    if (typeof val === "object") {
+      return Object.fromEntries(
+        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)])
+      );
+    }
+    return val;
+  };
+
+  const allActivities = [
+    ...recentReads.map((r) => ({
+      type: "read",
+      id: r.id,
+      book: r.bookName,
+      chapter: Number(r.chapter),
+      verse: Number(r.verseNumber),
+      time: r.createdOn,
+    })),
+    ...recentHighlights.map((h) => ({
+      type: "highlight",
+      id: h.id,
+      book: h.bookName,
+      chapter: Number(h.chapter),
+      verse: Number(h.verseNumber),
+      colorId: Number(h.colorId),
+      time: h.createdOn,
+    })),
+    ...recentNotes.map((n) => ({
+      type: "note",
+      id: n.id,
+      book: n.bookName,
+      chapter: Number(n.chapter),
+      verse: Number(n.verseNumber),
+      time: n.createdOn,
+    })),
+    ...recentFavorites.map((f) => ({
+      type: "favorite",
+      id: f.id,
+      book: f.bookName,
+      chapter: Number(f.chapter),
+      verse: Number(f.verseNumber),
+      time: f.createdOn,
+    })),
+    ...planProgress.map((p) => {
+      const completedDays = p.completedDaysJson ? JSON.parse(p.completedDaysJson) : [];
+      const lastCompleted = completedDays[completedDays.length - 1];
+      return {
+        type: "plan",
+        id: p.id,
+        book: p.readingPlan?.title || "Reading Plan",
+        chapter: lastCompleted || 0,
+        verse: completedDays.length,
+        time: p.lastCompletedDate || p.startDate,
+        planId: p.planId,
+        isPlanCompleted: p.isCompleted,
+      };
+    }),
+  ]
+    .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
+  const seenBooks = new Set();
+  const activities = [];
+  
+  for (const act of allActivities) {
+    if (activities.length >= 3) break;
+    
+    if (act.type === 'plan') {
+      activities.push(act);
+    } else {
+      const bookKey = act.book.toLowerCase();
+      if (!seenBooks.has(bookKey)) {
+        seenBooks.add(bookKey);
+        activities.push(act);
+      }
+    }
+  }
+
+  return { status: 200, message: "Recent activity fetched successfully", data: serializeBigInt(activities) };
+};
+
 export const deleteVerseExplanation = async (data, userId) => {
   const { id } = data;
   if (!id) return { status: 400, message: "Explanation ID is required" };
 
   await prisma.verseExplanation.delete({ where: { id: BigInt(id) } });
   return { status: 200, message: "Verse explanation deleted successfully" };
-};
+}

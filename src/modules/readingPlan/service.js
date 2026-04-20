@@ -69,11 +69,13 @@ export const addQuizQuestions = async (data, userId) => {
   return { status: 200, message: "Quiz questions added successfully", data: serializeBigInt(createdQuestions) };
 };
 
-export const getAllReadingPlans = async (data) => {
+export const getAllReadingPlans = async (data, userId = null) => {
   const { category, page = 1, pageSize = 10 } = data;
   const pageNum = parseInt(page) || 1;
   const pageSizeNum = Math.min(parseInt(pageSize) || 10, 50);
   const offset = (pageNum - 1) * pageSizeNum;
+
+  console.log("📋 getAllReadingPlans called with userId:", userId);
 
   const whereClause = { isActive: true };
   if (category) whereClause.category = category;
@@ -83,6 +85,20 @@ export const getAllReadingPlans = async (data) => {
     prisma.readingPlan.count({ where: whereClause }),
   ]);
 
+  let userProgressList = [];
+  if (userId) {
+    console.log("📋 Fetching user progress for userId:", userId);
+    userProgressList = await prisma.userPlanProgress.findMany({
+      where: { userId },
+      select: { planId: true, completedDaysJson: true, streak: true, isCompleted: true, startDate: true, lastCompletedDate: true, completedDate: true },
+    });
+    console.log("📋 User progress found:", userProgressList.length, "records");
+  } else {
+    console.log("📋 No userId provided, skipping user progress");
+  }
+
+  const userProgressMap = new Map(userProgressList.map(p => [p.planId, p]));
+
   const serializeBigInt = (val) => {
     if (typeof val === "bigint") return Number(val);
     if (Array.isArray(val)) return val.map(serializeBigInt);
@@ -90,8 +106,22 @@ export const getAllReadingPlans = async (data) => {
     return val;
   };
 
+  const plansWithUserProgress = plans.map(plan => {
+    const userProgress = userProgressMap.get(plan.planId);
+    return {
+      ...serializeBigInt(plan),
+      isStarted: !!userProgress,
+      userCompletedDays: userProgress?.completedDaysJson ? JSON.parse(userProgress.completedDaysJson) : [],
+      userStreak: userProgress?.streak || 0,
+      userIsCompleted: userProgress?.isCompleted || false,
+      userStartDate: userProgress?.startDate?.toISOString() || null,
+      userLastCompletedDate: userProgress?.lastCompletedDate?.toISOString() || null,
+      userCompletedDate: userProgress?.completedDate?.toISOString() || null,
+    };
+  });
+
   const totalPages = Math.ceil(totalCount / pageSizeNum);
-  return { status: 200, message: "Reading plans fetched successfully", data: serializeBigInt({ plans, totalCount, page: pageNum, pageSize: pageSizeNum, totalPages }) };
+  return { status: 200, message: "Reading plans fetched successfully", data: serializeBigInt({ plans: plansWithUserProgress, totalCount, page: pageNum, pageSize: pageSizeNum, totalPages }) };
 };
 
 export const getPlansByCategory = async (data) => {
@@ -103,14 +133,37 @@ export const getPlansByCategory = async (data) => {
 };
 
 export const startReadingPlan = async (data, userId) => {
+
   const { planId } = data;
+  console.log("📝 startReadingPlan called:", { planId, userId });
+  
   if (!planId) return { status: 400, message: "Plan ID is required" };
+  if (!userId || typeof userId !== 'string' || userId.length < 5) {
+    console.log("❌ startReadingPlan: Invalid userId:", userId);
+    return { status: 401, message: "Authentication required. Please log in again." };
+  }
 
   const plan = await prisma.readingPlan.findUnique({ where: { planId } });
+
   if (!plan) return { status: 404, message: "Reading plan not found" };
 
-  const existingProgress = await prisma.userPlanProgress.findUnique({ where: { userId_planId: { userId, planId } } });
-  if (existingProgress) return { status: 400, message: "You have already started this plan" };
+  // Check for this specific user
+  const userProgress = await prisma.userPlanProgress.findUnique({ where: { userId_planId: { userId, planId } } });
+  console.log("📝 Existing progress for user:", userProgress);
+  
+  if (userProgress) {
+    // Return the existing progress so app can navigate to it
+    const serializeBigInt = (val) => {
+      if (val === null || val === undefined) return val;
+      if (typeof val === "bigint") return Number(val);
+      return val;
+    };
+    return { 
+      status: 200, 
+      message: `You already have progress in "${plan.title}". Loading...`, 
+      data: serializeBigInt(userProgress) 
+    };
+  }
 
   const progress = await prisma.userPlanProgress.create({
     data: { userId, planId, startDate: new Date(), completedDaysJson: "[]", streak: 0, isCompleted: false, createdBy: userId },
@@ -179,7 +232,7 @@ export const getUserPlanProgress = async (data, userId) => {
   return { status: 200, message: "Plan progress fetched successfully", data: progress };
 };
 
-export const getDailyAssignment = async (data) => {
+export const getDailyAssignment = async (data, userId = null) => {
   const { planId, dayNumber } = data;
   if (!planId || !dayNumber) return { status: 400, message: "Plan ID and day number are required" };
 
@@ -193,9 +246,20 @@ export const getDailyAssignment = async (data) => {
     return val;
   };
 
+  // Check if user has completed this day
+  let completed = false;
+  if (userId) {
+    const progress = await prisma.userPlanProgress.findUnique({ where: { userId_planId: { userId, planId } } });
+    if (progress?.completedDaysJson) {
+      const completedDays = JSON.parse(progress.completedDaysJson);
+      completed = completedDays.includes(dayNumber);
+    }
+  }
+
   // Fetch quiz questions for this day
   const quizQuestions = await prisma.quizQuestion.findMany({ where: { planId, dayNumber } });
-  const questionsWithoutAnswer = quizQuestions.map(({ correctAnswer, ...q }) => ({
+  const questionsWithoutAnswer = quizQuestions.map(({ correctAnswer, ...q
+   }) => ({
     questionId: q.id, // Rename id to questionId
     id: q.id,
     question: q.question,
@@ -208,6 +272,7 @@ export const getDailyAssignment = async (data) => {
     chapters: assignment.chaptersJson ? JSON.parse(assignment.chaptersJson) : [],
     reflectionQuestions: assignment.reflectionQuestions ? JSON.parse(assignment.reflectionQuestions) : [],
     quizQuestions: serializeBigInt(questionsWithoutAnswer),
+    completed,
   };
   return { status: 200, message: "Daily assignment fetched successfully", data: serializeBigInt(parsed) };
 };
@@ -226,6 +291,7 @@ export const markDayCompleted = async (data, userId) => {
 
   const progress = await prisma.userPlanProgress.findUnique({ where: { userId_planId: { userId, planId } } });
   if (!progress) return { status: 404, message: "You have not started this plan" };
+  
 
   const completedDays = progress.completedDaysJson ? JSON.parse(progress.completedDaysJson) : [];
   if (completedDays.includes(dayNumber)) return { status: 400, message: "This day is already completed" };
@@ -600,6 +666,14 @@ export const removeReadingPlan = async (data, userId) => {
   const progress = await prisma.userPlanProgress.findUnique({ where: { userId_planId: { userId, planId } } });
   if (!progress) return { status: 404, message: "No progress found for this plan" };
 
+  // Delete all user's quiz answers for this plan
+  await prisma.userQuizAnswer.deleteMany({ where: { userId, planId } });
+
+  // Delete user's plan progress
   await prisma.userPlanProgress.delete({ where: { id: progress.id } });
   return { status: 200, message: "Reading plan removed successfully" };
 };
+
+
+
+

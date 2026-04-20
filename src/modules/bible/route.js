@@ -20,7 +20,7 @@ router.post("/delete-verse-explanation", authenticate, bibleController.deleteVer
 router.post("/add-verse-note", authenticate, bibleController.addVerseNote);
 router.post("/get-verse-note", authenticate, bibleController.getVerseNote);
 router.post("/delete-verse-note", authenticate, bibleController.deleteVerseNote);
-router.post("/get-todays-verse", bibleController.getTodaysVerse);
+router.post("/get-todys-verse", bibleController.getTodaysVerse);
 router.post("/get-home-stats", authenticate, bibleController.getHomeStats);
-
+router.post("/get-recent-activity", authenticate, bibleController.getRecentActivity);
 export default router;

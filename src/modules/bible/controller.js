@@ -171,6 +171,17 @@ export const getHomeStats = async (req, res) => {
   }
 };
 
+export const getRecentActivity = async (req, res) => {
+  try {
+    const limit = req.body.limit || 10;
+    const result = await bibleService.getRecentActivity(req.user.id, limit);
+    return res.status(result.status).json(formatApiResponse(result));
+  } catch (error) {
+    console.error("Get recent activity error:", error);
+    return res.status(500).json(formatApiResponse({ status: 500, message: "Error getting recent activity: " + error.message }));
+  }
+};
+
 export const deleteVerseExplanation = async (req, res) => {
   try {
     const result = await bibleService.deleteVerseExplanation(req.body, req.user.id);

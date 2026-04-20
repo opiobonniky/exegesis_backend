@@ -133,6 +133,7 @@ export const completeDay = async (req, res) => {
 
 export const submitAnswer = async (req, res) => {
   try {
+    console.log("📨 Controller received body:", JSON.stringify(req.body));
     const result = await readingPlanService.submitQuizAnswer(req.body, req.user.id);
     return res.status(result.status).json(formatApiResponse(result));
   } catch (error) {

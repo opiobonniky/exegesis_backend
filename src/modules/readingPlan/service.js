@@ -6,6 +6,7 @@ export const createReadingPlan = async (data, userId) => {
   if (!title || !totalDays) return { status: 400, message: "Title and totalDays are required" };
 
   const planId = generatePlanId();
+  console.log("📝 Creating reading plan:", { planId, title, totalDays, userId });
   const readingPlan = await prisma.readingPlan.create({
     data: { planId, title, description, totalDays, questionsEnabled: questionsEnabled || false, category, difficulty, isActive: true, createdBy: userId },
   });
@@ -195,8 +196,11 @@ export const getDailyAssignment = async (data) => {
   // Fetch quiz questions for this day
   const quizQuestions = await prisma.quizQuestion.findMany({ where: { planId, dayNumber } });
   const questionsWithoutAnswer = quizQuestions.map(({ correctAnswer, ...q }) => ({
-    ...q,
+    questionId: q.id, // Rename id to questionId
+    id: q.id,
+    question: q.question,
     options: q.optionsJson ? JSON.parse(q.optionsJson) : [],
+    explanation: q.explanation,
   }));
 
   const parsed = {
@@ -260,23 +264,83 @@ export const markDayCompleted = async (data, userId) => {
 };
 
 export const submitQuizAnswer = async (data, userId) => {
-  const { planId, dayNumber, questionId, userAnswer } = data;
-  if (!planId || !dayNumber || !questionId || userAnswer === undefined) return { status: 400, message: "planId, dayNumber, questionId, and userAnswer are required" };
+  let { planId, dayNumber, questionId, userAnswer } = data;
+  console.log("📥 submitQuizAnswer INPUT:", { planId, dayNumber, questionId, userAnswer, userId });
+  
+  // Parse planId - must be a string
+  if (planId !== undefined) planId = String(planId).trim();
+  if (!planId) {
+    console.log("❌ planId missing or empty");
+  }
+  
+  // Parse dayNumber - convert string/number to number
+  let dayNum = null;
+  if (dayNumber !== undefined && dayNumber !== null) {
+    if (typeof dayNumber === "number") {
+      dayNum = dayNumber;
+    } else if (typeof dayNumber === "string") {
+      dayNum = parseInt(dayNumber.trim(), 10);
+    }
+  }
+  if (!dayNum || isNaN(dayNum)) {
+    console.log("❌ dayNum invalid:", dayNumber, "parsed:", dayNum);
+  }
+  
+  // Parse questionId - convert to number
+  let qId = null;
+  if (questionId !== undefined && questionId !== null) {
+    if (typeof questionId === "number") {
+      qId = questionId;
+    } else if (typeof questionId === "string") {
+      qId = parseInt(questionId.trim(), 10);
+    }
+  }
+  if (!qId || isNaN(qId)) {
+    console.log("❌ questionId invalid:", questionId, "parsed:", qId);
+  }
+  
+  // Parse userAnswer - could be 0 (which is valid)
+  let answerIdx = null;
+  if (userAnswer !== undefined && userAnswer !== null) {
+    if (typeof userAnswer === "number") {
+      answerIdx = userAnswer;
+    } else if (typeof userAnswer === "string") {
+      answerIdx = parseInt(userAnswer.trim(), 10);
+    }
+  }
+  if (answerIdx === null || answerIdx === undefined || isNaN(answerIdx)) {
+    console.log("❌ userAnswer invalid:", userAnswer, "parsed:", answerIdx);
+  }
+  
+  // Validation
+  if (!planId || !dayNum || isNaN(dayNum) || !qId || isNaN(qId) || answerIdx === null || isNaN(answerIdx)) {
+    console.log("❌ Validation failed:", { planId, dayNum, qId, answerIdx });
+    return { status: 400, message: "planId, dayNumber, questionId, and userAnswer are required" };
+  }
+  
+  // Use parsed values
+  console.log("✅ Using validated data:", { planId, dayNumber: dayNum, questionId: qId, userAnswer: answerIdx });
 
-  const question = await prisma.quizQuestion.findUnique({ where: { id: BigInt(questionId) } });
+  const question = await prisma.quizQuestion.findUnique({ where: { id: BigInt(qId) } });
   if (!question) return { status: 404, message: "Quiz question not found" };
 
-  const isCorrect = question.correctAnswer === userAnswer;
-  const existingAnswer = await prisma.userQuizAnswer.findUnique({ where: { userId_questionId: { userId, questionId: BigInt(questionId) } } });
+  const isCorrect = question.correctAnswer === answerIdx;
+  const existingAnswer = await prisma.userQuizAnswer.findUnique({ where: { userId_questionId: { userId, questionId: BigInt(qId) } } });
 
   let answer;
   if (existingAnswer) {
-    answer = await prisma.userQuizAnswer.update({ where: { id: existingAnswer.id }, data: { userAnswer, isCorrect, numberAttempt: (existingAnswer.numberAttempt || 0) + 1 } });
+    answer = await prisma.userQuizAnswer.update({ where: { id: existingAnswer.id }, data: { userAnswer: answerIdx, isCorrect, numberAttempt: (existingAnswer.numberAttempt || 0) + 1 } });
   } else {
-    answer = await prisma.userQuizAnswer.create({ data: { userId, planId, dayNumber, questionId: BigInt(questionId), userAnswer, isCorrect, numberAttempt: 1 } });
+    answer = await prisma.userQuizAnswer.create({ data: { userId, planId, dayNumber: dayNum, questionId: BigInt(qId), userAnswer: answerIdx, isCorrect, numberAttempt: 1 } });
   }
 
-  return { status: 200, message: "Quiz answer submitted", data: { ...answer, isCorrect } };
+  const serializeBigInt = (val) => {
+    if (val === null || val === undefined) return val;
+    if (typeof val === "bigint") return val.toString();
+    return val;
+  };
+
+  return { status: 200, message: "Quiz answer submitted", data: { ...serializeBigInt(answer), isCorrect, correctAnswer: question.correctAnswer, explanation: question.explanation } };
 };
 
 export const getQuizQuestions = async (data) => {

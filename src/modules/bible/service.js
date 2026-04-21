@@ -32,7 +32,7 @@ export const addHighlight = async (data, userId) => {
         colorId: Number(highlight.colorId),
         note: highlight.note,
         createdBy: highlight.createdBy,
-        createdOn: highlight.createdOn,
+        createdOn: highlight.createdOn ? highlight.createdOn.toISOString() : null,
       });
     } catch (error) {
       if (error.code !== "P2002") throw error;
@@ -67,7 +67,7 @@ export const getHighlights = async (data, userId) => {
     colorId: Number(h.colorId),
     note: h.note,
     createdBy: h.createdBy,
-    createdOn: h.createdOn,
+    createdOn: h.createdOn ? h.createdOn.toISOString() : null,
   }));
 
   const totalPages = Math.ceil(totalCount / pageSizeNum);
@@ -99,7 +99,7 @@ export const addReadHistory = async (data, userId) => {
         chapter: Number(readHistory.chapter),
         verseNumber: Number(readHistory.verseNumber),
         createdBy: readHistory.createdBy,
-        createdOn: readHistory.createdOn,
+        createdOn: readHistory.createdOn ? readHistory.createdOn.toISOString() : null,
       }
     };
   } catch (error) {
@@ -129,7 +129,7 @@ export const getReadHistory = async (data, userId) => {
     chapter: Number(h.chapter),
     verseNumber: Number(h.verseNumber),
     createdBy: h.createdBy,
-    createdOn: h.createdOn,
+    createdOn: h.createdOn ? h.createdOn.toISOString() : null,
   }));
 
   const totalPages = Math.ceil(totalCount / pageSizeNum);
@@ -163,7 +163,7 @@ export const addFavorite = async (data, userId) => {
         chapter: Number(favorite.chapter),
         verseNumber: Number(favorite.verseNumber),
         createdBy: favorite.createdBy,
-        createdOn: favorite.createdOn,
+        createdOn: favorite.createdOn ? favorite.createdOn.toISOString() : null,
       });
     } catch (error) {
       if (error.code !== "P2002") throw error;
@@ -194,7 +194,7 @@ export const getFavorites = async (data, userId) => {
     chapter: Number(f.chapter),
     verseNumber: Number(f.verseNumber),
     createdBy: f.createdBy,
-    createdOn: f.createdOn,
+    createdOn: f.createdOn ? f.createdOn.toISOString() : null,
   }));
 
   const totalPages = Math.ceil(totalCount / pageSizeNum);
@@ -318,7 +318,7 @@ export const addVerseNote = async (data, userId) => {
         verseNumber: Number(verseNote.verseNumber),
         note: verseNote.note,
         createdBy: verseNote.createdBy,
-        createdOn: verseNote.createdOn,
+        createdOn: verseNote.createdOn ? verseNote.createdOn.toISOString() : null,
       });
     } catch (error) {
       if (error.code !== "P2002") throw error;
@@ -342,7 +342,7 @@ export const getVerseNote = async (data, userId) => {
     verseNumber: Number(n.verseNumber),
     note: n.note,
     createdBy: n.createdBy,
-    createdOn: n.createdOn,
+    createdOn: n.createdOn ? n.createdOn.toISOString() : null,
   }));
   return { status: 200, message: "Verse notes fetched successfully", data: serializedNotes };
 };

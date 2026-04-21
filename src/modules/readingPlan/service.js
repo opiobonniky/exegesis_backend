@@ -258,20 +258,36 @@ export const getDailyAssignment = async (data, userId = null) => {
 
   // Fetch quiz questions for this day
   const quizQuestions = await prisma.quizQuestion.findMany({ where: { planId, dayNumber } });
-  const questionsWithoutAnswer = quizQuestions.map(({ correctAnswer, ...q
-   }) => ({
-    questionId: q.id, // Rename id to questionId
-    id: q.id,
-    question: q.question,
-    options: q.optionsJson ? JSON.parse(q.optionsJson) : [],
-    explanation: q.explanation,
-  }));
+  
+  // Fetch user's previous answers if logged in
+  let userAnswers = [];
+  if (userId) {
+    userAnswers = await prisma.userQuizAnswer.findMany({ 
+      where: { userId, planId, dayNumber } 
+    });
+  }
+  
+  const userAnswersMap = new Map(userAnswers.map(ua => [ua.questionId.toString(), ua]));
+  
+  const questionsWithUserAnswer = quizQuestions.map(q => {
+    const userAnswer = userAnswersMap.get(q.id.toString());
+    return {
+      questionId: q.id,
+      id: q.id,
+      question: q.question,
+      options: q.optionsJson ? JSON.parse(q.optionsJson) : [],
+      explanation: q.explanation,
+      userAnswer: userAnswer ? userAnswer.userAnswer : null,
+      isCorrect: userAnswer ? userAnswer.isCorrect : null,
+      numberAttempt: userAnswer ? userAnswer.numberAttempt : null,
+    };
+  });
 
   const parsed = {
     ...assignment,
     chapters: assignment.chaptersJson ? JSON.parse(assignment.chaptersJson) : [],
     reflectionQuestions: assignment.reflectionQuestions ? JSON.parse(assignment.reflectionQuestions) : [],
-    quizQuestions: serializeBigInt(questionsWithoutAnswer),
+    quizQuestions: serializeBigInt(questionsWithUserAnswer),
     completed,
   };
   return { status: 200, message: "Daily assignment fetched successfully", data: serializeBigInt(parsed) };

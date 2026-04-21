@@ -21,6 +21,7 @@ export const addHighlight = async (data, userId) => {
           colorId: BigInt(colorId),
           note,
           createdBy: userId,
+          createdOn: new Date(),
         },
       });
       added.push({
@@ -87,7 +88,7 @@ export const addReadHistory = async (data, userId) => {
 
   try {
     const readHistory = await prisma.readHistory.create({
-      data: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(verseNumber), createdBy: userId },
+      data: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(verseNumber), createdBy: userId, createdOn: new Date() },
     });
     return {
       status: 200,
@@ -154,7 +155,7 @@ export const addFavorite = async (data, userId) => {
   for (const v of verses) {
     try {
       const favorite = await prisma.favorite.create({
-        data: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(v), createdBy: userId },
+        data: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(v), createdBy: userId, createdOn: new Date() },
       });
       added.push({
         id: Number(favorite.id),
@@ -308,7 +309,7 @@ export const addVerseNote = async (data, userId) => {
   for (const v of verses) {
     try {
       const verseNote = await prisma.note.create({
-        data: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(v), note, createdBy: userId },
+        data: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(v), note, createdBy: userId, createdOn: new Date() },
       });
       added.push({
         id: Number(verseNote.id),

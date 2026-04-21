@@ -26,6 +26,7 @@ const corsOptions = {
       "http://localhost:8080",
       "http://localhost:5001",
       "https://app.exegesisproject.org",
+      "https://exegesisproject.org",
       process.env.CLIENT_URL,
       process.env.SITEGRROUND_URL,
     ].filter(Boolean);

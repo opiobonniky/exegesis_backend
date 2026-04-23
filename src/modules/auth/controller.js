@@ -135,3 +135,13 @@ export const resetPassword = async (req, res) => {
 export const test = (req, res) => {
   return res.status(200).json(formatApiResponse({ status: 200, message: "Server is running", data: "Connection successful" }));
 };
+
+export const updatePassword = async (req, res) => {
+  try {
+    const result = await authService.updatePassword(req.user.id, req.body);
+    return res.status(result.status).json(formatApiResponse(result));
+  } catch (error) {
+    console.error("Update password error:", error);
+    return res.status(500).json(formatApiResponse({ status: 500, message: "Failed to update password: " + error.message }));
+  }
+};

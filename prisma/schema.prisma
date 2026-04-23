@@ -170,6 +170,8 @@ model Highlight {
 
   user SystemUser? @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 
+  // Note: This unique constraint needs to be added via migration
+  // @@unique([createdBy, bookName, chapter, verseNumber])
   @@map("high_lights")
 }
 

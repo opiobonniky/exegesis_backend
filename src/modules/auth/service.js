@@ -380,8 +380,21 @@ export const getCurrentUser = async (userId) => {
   if (!user) {
     return { status: 404, message: "User not found" };
   }
-  user.password = null;
-  return { status: 200, message: "User details fetched successfully", data: user };
+  
+  const serializeUser = (u) => {
+    const obj = { ...u };
+    obj.password = null;
+    for (const key of Object.keys(obj)) {
+      if (obj[key] instanceof Date) {
+        obj[key] = obj[key].toISOString();
+      } else if (typeof obj[key] === "bigint") {
+        obj[key] = Number(obj[key]);
+      }
+    }
+    return obj;
+  };
+  
+  return { status: 200, message: "User details fetched successfully", data: serializeUser(user) };
 };
 
 export const updateCurrentUser = async (userId, data) => {
@@ -616,4 +629,38 @@ export const resetPassword = async (data) => {
   });
 
   return { status: 200, message: "Password reset successfully" };
+};
+
+export const updatePassword = async (userId, data) => {
+  const { currentPassword, newPassword } = data;
+  
+  if (!currentPassword || !newPassword) {
+    return { status: 400, message: "Current password and new password are required" };
+  }
+
+  const user = await prisma.systemUser.findUnique({ where: { id: userId } });
+  if (!user) {
+    return { status: 404, message: "User not found" };
+  }
+
+  const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+  if (!isValidPassword) {
+    return { status: 422, message: "Current password is incorrect" };
+  }
+
+  if (newPassword.length < 8) {
+    return { status: 400, message: "Password must be at least 8 characters with uppercase, lowercase, number, and special character" };
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await prisma.systemUser.update({
+    where: { id: user.id },
+    data: {
+      password: hashedPassword,
+      updatedOn: new Date(),
+      updatedBy: user.id,
+    },
+  });
+
+  return { status: 200, message: "Password updated successfully" };
 };

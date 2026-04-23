@@ -4,26 +4,54 @@ export const addHighlight = async (data, userId) => {
   const { bookName, chapter, verseNumber, verseNumbers, colorId, note } = data;
 
   if (!bookName || !chapter || !colorId) {
-    return { status: 400, message: "bookName, chapter, and colorId are required" };
+    return {
+      status: 400,
+      message: "bookName, chapter, and colorId are required",
+    };
   }
 
   const verses = verseNumbers || (verseNumber ? [verseNumber] : []);
-  if (verses.length === 0) return { status: 400, message: "verseNumber or verseNumbers is required" };
+  if (verses.length === 0)
+    return { status: 400, message: "verseNumber or verseNumbers is required" };
 
   const added = [];
   for (const v of verses) {
     try {
-      const highlight = await prisma.highlight.create({
-        data: {
+      // First check if this highlight already exists
+      const existing = await prisma.highlight.findFirst({
+        where: {
+          createdBy: userId,
           bookName,
           chapter: BigInt(chapter),
           verseNumber: BigInt(v),
-          colorId: BigInt(colorId),
-          note,
-          createdBy: userId,
-          createdOn: new Date(),
         },
       });
+
+      let highlight;
+      if (existing) {
+        // Update existing highlight
+        highlight = await prisma.highlight.update({
+          where: { id: existing.id },
+          data: {
+            colorId: BigInt(colorId),
+            note: note || null,
+            createdOn: new Date(),
+          },
+        });
+      } else {
+        // Create new highlight
+        highlight = await prisma.highlight.create({
+          data: {
+            bookName,
+            chapter: BigInt(chapter),
+            verseNumber: BigInt(v),
+            colorId: BigInt(colorId),
+            note: note || null,
+            createdBy: userId,
+            createdOn: new Date(),
+          },
+        });
+      }
       added.push({
         id: Number(highlight.id),
         bookName: highlight.bookName,
@@ -32,10 +60,12 @@ export const addHighlight = async (data, userId) => {
         colorId: Number(highlight.colorId),
         note: highlight.note,
         createdBy: highlight.createdBy,
-        createdOn: highlight.createdOn ? highlight.createdOn.toISOString() : null,
+        createdOn: highlight.createdOn
+          ? highlight.createdOn.toISOString()
+          : null,
       });
     } catch (error) {
-      if (error.code !== "P2002") throw error;
+      console.error("Error adding highlight:", error.message);
     }
   }
 
@@ -43,7 +73,14 @@ export const addHighlight = async (data, userId) => {
 };
 
 export const getHighlights = async (data, userId) => {
-  const { bookName, chapter, verseNumber, colorId, page = 1, pageSize = 20 } = data;
+  const {
+    bookName,
+    chapter,
+    verseNumber,
+    colorId,
+    page = 1,
+    pageSize = 20,
+  } = data;
   const pageNum = parseInt(page) || 1;
   const pageSizeNum = Math.min(parseInt(pageSize) || 20, 50);
   const offset = (pageNum - 1) * pageSizeNum;
@@ -55,11 +92,16 @@ export const getHighlights = async (data, userId) => {
   if (colorId) whereClause.colorId = BigInt(colorId);
 
   const [highlights, totalCount] = await Promise.all([
-    prisma.highlight.findMany({ where: whereClause, skip: offset, take: pageSizeNum, orderBy: { createdOn: "desc" } }),
+    prisma.highlight.findMany({
+      where: whereClause,
+      skip: offset,
+      take: pageSizeNum,
+      orderBy: { createdOn: "desc" },
+    }),
     prisma.highlight.count({ where: whereClause }),
   ]);
 
-  const serializedHighlights = highlights.map(h => ({
+  const serializedHighlights = highlights.map((h) => ({
     id: Number(h.id),
     bookName: h.bookName,
     chapter: Number(h.chapter),
@@ -71,41 +113,90 @@ export const getHighlights = async (data, userId) => {
   }));
 
   const totalPages = Math.ceil(totalCount / pageSizeNum);
-  return { status: 200, message: "Highlights fetched successfully", data: { highlights: serializedHighlights, totalCount, page: pageNum, pageSize: pageSizeNum, totalPages } };
+  return {
+    status: 200,
+    message: "Highlights fetched successfully",
+    data: {
+      highlights: serializedHighlights,
+      totalCount,
+      page: pageNum,
+      pageSize: pageSizeNum,
+      totalPages,
+    },
+  };
 };
 
 export const deleteHighlight = async (data, userId) => {
   const { highlightId } = data;
   if (!highlightId) return { status: 400, message: "Highlight ID is required" };
 
-  await prisma.highlight.delete({ where: { id: BigInt(highlightId), createdBy: userId } });
+  await prisma.highlight.delete({
+    where: { id: BigInt(highlightId), createdBy: userId },
+  });
   return { status: 200, message: "Highlight deleted successfully" };
 };
 
 export const addReadHistory = async (data, userId) => {
   const { bookName, chapter, verseNumber } = data;
-  if (!bookName || !chapter || !verseNumber) return { status: 400, message: "bookName, chapter, and verseNumber are required" };
+  if (!bookName || !chapter || !verseNumber)
+    return {
+      status: 400,
+      message: "bookName, chapter, and verseNumber are required",
+    };
 
-  try {
-    const readHistory = await prisma.readHistory.create({
-      data: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(verseNumber), createdBy: userId, createdOn: new Date() },
+  const existing = await prisma.readHistory.findUnique({
+    where: {
+      createdBy_bookName_chapter_verseNumber: {
+        createdBy: userId,
+        bookName,
+        chapter: BigInt(chapter),
+        verseNumber: BigInt(verseNumber),
+      },
+    },
+  });
+
+  if (existing) {
+    const updated = await prisma.readHistory.update({
+      where: { id: existing.id },
+      data: { createdOn: new Date() },
     });
     return {
       status: 200,
-      message: "Read history added successfully",
+      message: "Read history updated successfully",
       data: {
-        id: Number(readHistory.id),
-        bookName: readHistory.bookName,
-        chapter: Number(readHistory.chapter),
-        verseNumber: Number(readHistory.verseNumber),
-        createdBy: readHistory.createdBy,
-        createdOn: readHistory.createdOn ? readHistory.createdOn.toISOString() : null,
-      }
+        id: Number(updated.id),
+        bookName: updated.bookName,
+        chapter: Number(updated.chapter),
+        verseNumber: Number(updated.verseNumber),
+        createdBy: updated.createdBy,
+        createdOn: updated.createdOn ? updated.createdOn.toISOString() : null,
+      },
     };
-  } catch (error) {
-    if (error.code === "P2002") return { status: 400, message: "Read history already exists" };
-    throw error;
   }
+
+  const readHistory = await prisma.readHistory.create({
+    data: {
+      bookName,
+      chapter: BigInt(chapter),
+      verseNumber: BigInt(verseNumber),
+      createdBy: userId,
+      createdOn: new Date(),
+    },
+  });
+  return {
+    status: 200,
+    message: "Read history added successfully",
+    data: {
+      id: Number(readHistory.id),
+      bookName: readHistory.bookName,
+      chapter: Number(readHistory.chapter),
+      verseNumber: Number(readHistory.verseNumber),
+      createdBy: readHistory.createdBy,
+      createdOn: readHistory.createdOn
+        ? readHistory.createdOn.toISOString()
+        : null,
+    },
+  };
 };
 
 export const getReadHistory = async (data, userId) => {
@@ -119,11 +210,16 @@ export const getReadHistory = async (data, userId) => {
   if (chapter) whereClause.chapter = BigInt(chapter);
 
   const [readHistories, totalCount] = await Promise.all([
-    prisma.readHistory.findMany({ where: whereClause, skip: offset, take: pageSizeNum, orderBy: { createdOn: "desc" } }),
+    prisma.readHistory.findMany({
+      where: whereClause,
+      skip: offset,
+      take: pageSizeNum,
+      orderBy: { createdOn: "desc" },
+    }),
     prisma.readHistory.count({ where: whereClause }),
   ]);
 
-  const serialized = readHistories.map(h => ({
+  const serialized = readHistories.map((h) => ({
     id: Number(h.id),
     bookName: h.bookName,
     chapter: Number(h.chapter),
@@ -133,29 +229,50 @@ export const getReadHistory = async (data, userId) => {
   }));
 
   const totalPages = Math.ceil(totalCount / pageSizeNum);
-  return { status: 200, message: "Read history fetched successfully", data: { readHistories: serialized, totalCount, page: pageNum, pageSize: pageSizeNum, totalPages } };
+  return {
+    status: 200,
+    message: "Read history fetched successfully",
+    data: {
+      readHistories: serialized,
+      totalCount,
+      page: pageNum,
+      pageSize: pageSizeNum,
+      totalPages,
+    },
+  };
 };
 
 export const deleteReadHistory = async (data, userId) => {
   const { readHistoryIds } = data;
-  if (!readHistoryIds || !Array.isArray(readHistoryIds)) return { status: 400, message: "Read history IDs are required" };
+  if (!readHistoryIds || !Array.isArray(readHistoryIds))
+    return { status: 400, message: "Read history IDs are required" };
 
-  await prisma.readHistory.deleteMany({ where: { id: { in: readHistoryIds.map(BigInt) }, createdBy: userId } });
+  await prisma.readHistory.deleteMany({
+    where: { id: { in: readHistoryIds.map(BigInt) }, createdBy: userId },
+  });
   return { status: 200, message: "Read history deleted successfully" };
 };
 
 export const addFavorite = async (data, userId) => {
   const { bookName, chapter, verseNumber, verseNumbers } = data;
-  if (!bookName || !chapter) return { status: 400, message: "bookName and chapter are required" };
+  if (!bookName || !chapter)
+    return { status: 400, message: "bookName and chapter are required" };
 
   const verses = verseNumbers || (verseNumber ? [verseNumber] : []);
-  if (verses.length === 0) return { status: 400, message: "verseNumber or verseNumbers is required" };
+  if (verses.length === 0)
+    return { status: 400, message: "verseNumber or verseNumbers is required" };
 
   const added = [];
   for (const v of verses) {
     try {
       const favorite = await prisma.favorite.create({
-        data: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(v), createdBy: userId, createdOn: new Date() },
+        data: {
+          bookName,
+          chapter: BigInt(chapter),
+          verseNumber: BigInt(v),
+          createdBy: userId,
+          createdOn: new Date(),
+        },
       });
       added.push({
         id: Number(favorite.id),
@@ -184,11 +301,16 @@ export const getFavorites = async (data, userId) => {
   if (chapter) whereClause.chapter = BigInt(chapter);
 
   const [favorites, totalCount] = await Promise.all([
-    prisma.favorite.findMany({ where: whereClause, skip: offset, take: pageSizeNum, orderBy: { createdOn: "desc" } }),
+    prisma.favorite.findMany({
+      where: whereClause,
+      skip: offset,
+      take: pageSizeNum,
+      orderBy: { createdOn: "desc" },
+    }),
     prisma.favorite.count({ where: whereClause }),
   ]);
 
-  const serialized = favorites.map(f => ({
+  const serialized = favorites.map((f) => ({
     id: Number(f.id),
     bookName: f.bookName,
     chapter: Number(f.chapter),
@@ -198,26 +320,49 @@ export const getFavorites = async (data, userId) => {
   }));
 
   const totalPages = Math.ceil(totalCount / pageSizeNum);
-  return { status: 200, message: "Favorites fetched successfully", data: { favorites: serialized, totalCount, page: pageNum, pageSize: pageSizeNum, totalPages } };
+  return {
+    status: 200,
+    message: "Favorites fetched successfully",
+    data: {
+      favorites: serialized,
+      totalCount,
+      page: pageNum,
+      pageSize: pageSizeNum,
+      totalPages,
+    },
+  };
 };
 
 export const deleteFavorite = async (data, userId) => {
   const { favoriteId } = data;
   if (!favoriteId) return { status: 400, message: "Favorite ID is required" };
 
-  await prisma.favorite.delete({ where: { id: BigInt(favoriteId), createdBy: userId } });
+  await prisma.favorite.delete({
+    where: { id: BigInt(favoriteId), createdBy: userId },
+  });
   return { status: 200, message: "Favorite deleted successfully" };
 };
 
 export const getVerseExplanation = async (data) => {
   const { bookName, chapter, verseNumber } = data;
-  if (!bookName || !chapter || !verseNumber) return { status: 400, message: "bookName, chapter, and verseNumber are required" };
+  if (!bookName || !chapter || !verseNumber)
+    return {
+      status: 400,
+      message: "bookName, chapter, and verseNumber are required",
+    };
 
   const explanation = await prisma.verseExplanation.findUnique({
-    where: { bookName_chapter_verseNumber: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(verseNumber) } },
+    where: {
+      bookName_chapter_verseNumber: {
+        bookName,
+        chapter: BigInt(chapter),
+        verseNumber: BigInt(verseNumber),
+      },
+    },
   });
 
-  if (!explanation) return { status: 404, message: "Verse explanation not found" };
+  if (!explanation)
+    return { status: 404, message: "Verse explanation not found" };
 
   const serializeBigInt = (val) => {
     if (val === null || val === undefined) return val;
@@ -225,30 +370,68 @@ export const getVerseExplanation = async (data) => {
     if (Array.isArray(val)) return val.map(serializeBigInt);
     if (typeof val === "object") {
       return Object.fromEntries(
-        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)])
+        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)]),
       );
     }
     return val;
   };
 
-  return { status: 200, message: "Verse explanation fetched successfully", data: serializeBigInt(explanation) };
+  return {
+    status: 200,
+    message: "Verse explanation fetched successfully",
+    data: serializeBigInt(explanation),
+  };
 };
 
 export const addVerseExplanation = async (data, userId) => {
-  const { bookName, chapter, verseNumber, explanation, learnMore, bibleVersion, id } = data;
-  if (!bookName || !chapter || !verseNumber) return { status: 400, message: "bookName, chapter, and verseNumber are required" };
+  const {
+    bookName,
+    chapter,
+    verseNumber,
+    explanation,
+    learnMore,
+    bibleVersion,
+    id,
+  } = data;
+  if (!bookName || !chapter || !verseNumber)
+    return {
+      status: 400,
+      message: "bookName, chapter, and verseNumber are required",
+    };
 
   let verseExplanation;
   if (id) {
     verseExplanation = await prisma.verseExplanation.update({
       where: { id: BigInt(id) },
-      data: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(verseNumber), explanation, learnMore, bibleVersion, updatedBy: userId },
+      data: {
+        bookName,
+        chapter: BigInt(chapter),
+        verseNumber: BigInt(verseNumber),
+        explanation,
+        learnMore,
+        bibleVersion,
+        updatedBy: userId,
+      },
     });
   } else {
     verseExplanation = await prisma.verseExplanation.upsert({
-      where: { bookName_chapter_verseNumber: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(verseNumber) } },
+      where: {
+        bookName_chapter_verseNumber: {
+          bookName,
+          chapter: BigInt(chapter),
+          verseNumber: BigInt(verseNumber),
+        },
+      },
       update: { explanation, learnMore, bibleVersion, updatedBy: userId },
-      create: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(verseNumber), explanation, learnMore, bibleVersion, createdBy: userId },
+      create: {
+        bookName,
+        chapter: BigInt(chapter),
+        verseNumber: BigInt(verseNumber),
+        explanation,
+        learnMore,
+        bibleVersion,
+        createdBy: userId,
+      },
     });
   }
 
@@ -258,13 +441,15 @@ export const addVerseExplanation = async (data, userId) => {
     if (Array.isArray(val)) return val.map(serializeBigInt);
     if (typeof val === "object") {
       return Object.fromEntries(
-        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)])
+        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)]),
       );
     }
     return val;
   };
 
-  const msg = id ? "Verse explanation updated successfully" : "Verse explanation added successfully";
+  const msg = id
+    ? "Verse explanation updated successfully"
+    : "Verse explanation added successfully";
   return { status: 200, message: msg, data: serializeBigInt(verseExplanation) };
 };
 
@@ -278,7 +463,12 @@ export const getAllVersesExplanation = async (data) => {
   if (bookName) whereClause.bookName = bookName;
 
   const [explanations, totalCount] = await Promise.all([
-    prisma.verseExplanation.findMany({ where: whereClause, skip: offset, take: pageSizeNum, orderBy: { bookName: "asc" } }),
+    prisma.verseExplanation.findMany({
+      where: whereClause,
+      skip: offset,
+      take: pageSizeNum,
+      orderBy: { bookName: "asc" },
+    }),
     prisma.verseExplanation.count({ where: whereClause }),
   ]);
 
@@ -288,29 +478,70 @@ export const getAllVersesExplanation = async (data) => {
     if (Array.isArray(val)) return val.map(serializeBigInt);
     if (typeof val === "object") {
       return Object.fromEntries(
-        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)])
+        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)]),
       );
     }
     return val;
   };
 
   const totalPages = Math.ceil(totalCount / pageSizeNum);
-  return { status: 200, message: "Verse explanations fetched successfully", data: serializeBigInt({ explanations, totalCount, page: pageNum, pageSize: pageSizeNum, totalPages }) };
+  return {
+    status: 200,
+    message: "Verse explanations fetched successfully",
+    data: serializeBigInt({
+      explanations,
+      totalCount,
+      page: pageNum,
+      pageSize: pageSizeNum,
+      totalPages,
+    }),
+  };
 };
 
 export const addVerseNote = async (data, userId) => {
   const { bookName, chapter, verseNumber, verseNumbers, note } = data;
-  if (!bookName || !chapter || !note) return { status: 400, message: "bookName, chapter, and note are required" };
+  if (!bookName || !chapter || !note)
+    return { status: 400, message: "bookName, chapter, and note are required" };
 
   const verses = verseNumbers || (verseNumber ? [verseNumber] : []);
-  if (verses.length === 0) return { status: 400, message: "verseNumber or verseNumbers is required" };
+  if (verses.length === 0)
+    return { status: 400, message: "verseNumber or verseNumbers is required" };
 
   const added = [];
   for (const v of verses) {
     try {
-      const verseNote = await prisma.note.create({
-        data: { bookName, chapter: BigInt(chapter), verseNumber: BigInt(v), note, createdBy: userId, createdOn: new Date() },
+      const existingNote = await prisma.note.findUnique({
+        where: {
+          createdBy_bookName_chapter_verseNumber: {
+            createdBy: userId,
+            bookName,
+            chapter: BigInt(chapter),
+            verseNumber: BigInt(v),
+          },
+        },
       });
+
+      let verseNote;
+      if (existingNote) {
+        verseNote = await prisma.note.update({
+          where: { id: existingNote.id },
+          data: {
+            note,
+            createdOn: new Date(),
+          },
+        });
+      } else {
+        verseNote = await prisma.note.create({
+          data: {
+            bookName,
+            chapter: BigInt(chapter),
+            verseNumber: BigInt(v),
+            note,
+            createdBy: userId,
+            createdOn: new Date(),
+          },
+        });
+      }
       added.push({
         id: Number(verseNote.id),
         bookName: verseNote.bookName,
@@ -318,10 +549,12 @@ export const addVerseNote = async (data, userId) => {
         verseNumber: Number(verseNote.verseNumber),
         note: verseNote.note,
         createdBy: verseNote.createdBy,
-        createdOn: verseNote.createdOn ? verseNote.createdOn.toISOString() : null,
+        createdOn: verseNote.createdOn
+          ? verseNote.createdOn.toISOString()
+          : null,
       });
     } catch (error) {
-      if (error.code !== "P2002") throw error;
+      console.error("Error adding note for verse", v, error);
     }
   }
 
@@ -334,8 +567,11 @@ export const getVerseNote = async (data, userId) => {
   if (data.chapter) whereClause.chapter = BigInt(data.chapter);
   if (data.verseNumber) whereClause.verseNumber = BigInt(data.verseNumber);
 
-  const notes = await prisma.note.findMany({ where: whereClause, orderBy: { createdOn: "desc" } });
-  const serializedNotes = notes.map(n => ({
+  const notes = await prisma.note.findMany({
+    where: whereClause,
+    orderBy: { createdOn: "desc" },
+  });
+  const serializedNotes = notes.map((n) => ({
     id: Number(n.id),
     bookName: n.bookName,
     chapter: Number(n.chapter),
@@ -344,14 +580,20 @@ export const getVerseNote = async (data, userId) => {
     createdBy: n.createdBy,
     createdOn: n.createdOn ? n.createdOn.toISOString() : null,
   }));
-  return { status: 200, message: "Verse notes fetched successfully", data: serializedNotes };
+  return {
+    status: 200,
+    message: "Verse notes fetched successfully",
+    data: serializedNotes,
+  };
 };
 
 export const deleteVerseNote = async (data, userId) => {
   const { noteId } = data;
   if (!noteId) return { status: 400, message: "Note ID is required" };
 
-  await prisma.note.delete({ where: { id: BigInt(noteId), createdBy: userId } });
+  await prisma.note.delete({
+    where: { id: BigInt(noteId), createdBy: userId },
+  });
   return { status: 200, message: "Verse note deleted successfully" };
 };
 
@@ -371,7 +613,8 @@ export const getTodaysVerse = async () => {
     });
   }
 
-  if (!dailyVerse) return { status: 404, message: "No daily verse found for today" };
+  if (!dailyVerse)
+    return { status: 404, message: "No daily verse found for today" };
 
   const serializeBigInt = (val) => {
     if (val === null || val === undefined) return val;
@@ -379,17 +622,27 @@ export const getTodaysVerse = async () => {
     if (Array.isArray(val)) return val.map(serializeBigInt);
     if (typeof val === "object") {
       return Object.fromEntries(
-        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)])
+        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)]),
       );
     }
     return val;
   };
 
-  return { status: 200, message: "Today's verse fetched successfully", data: serializeBigInt(dailyVerse) };
+  return {
+    status: 200,
+    message: "Today's verse fetched successfully",
+    data: serializeBigInt(dailyVerse),
+  };
 };
 
 export const getHomeStats = async (userId) => {
-  const [highlightCount, favoriteCount, noteCount, readHistoryCount, planProgressCount] = await Promise.all([
+  const [
+    highlightCount,
+    favoriteCount,
+    noteCount,
+    readHistoryCount,
+    planProgressCount,
+  ] = await Promise.all([
     prisma.highlight.count({ where: { createdBy: userId } }),
     prisma.favorite.count({ where: { createdBy: userId } }),
     prisma.note.count({ where: { createdBy: userId } }),
@@ -397,13 +650,29 @@ export const getHomeStats = async (userId) => {
     prisma.userPlanProgress.count({ where: { userId } }),
   ]);
 
-  return { status: 200, message: "Home stats fetched successfully", data: { highlightCount, favoriteCount, noteCount, readHistoryCount, planProgressCount } };
+  return {
+    status: 200,
+    message: "Home stats fetched successfully",
+    data: {
+      highlightCount,
+      favoriteCount,
+      noteCount,
+      readHistoryCount,
+      planProgressCount,
+    },
+  };
 };
 
 export const getRecentActivity = async (userId, limit = 10) => {
   const limitNum = Math.min(parseInt(limit) || 10, 20);
 
-  const [recentReads, recentHighlights, recentNotes, recentFavorites, planProgress] = await Promise.all([
+  const [
+    recentReads,
+    recentHighlights,
+    recentNotes,
+    recentFavorites,
+    planProgress,
+  ] = await Promise.all([
     prisma.readHistory.findMany({
       where: { createdBy: userId },
       take: limitNum,
@@ -438,7 +707,7 @@ export const getRecentActivity = async (userId, limit = 10) => {
     if (Array.isArray(val)) return val.map(serializeBigInt);
     if (typeof val === "object") {
       return Object.fromEntries(
-        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)])
+        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)]),
       );
     }
     return val;
@@ -479,7 +748,9 @@ export const getRecentActivity = async (userId, limit = 10) => {
       time: f.createdOn,
     })),
     ...planProgress.map((p) => {
-      const completedDays = p.completedDaysJson ? JSON.parse(p.completedDaysJson) : [];
+      const completedDays = p.completedDaysJson
+        ? JSON.parse(p.completedDaysJson)
+        : [];
       const lastCompleted = completedDays[completedDays.length - 1];
       return {
         type: "plan",
@@ -492,16 +763,15 @@ export const getRecentActivity = async (userId, limit = 10) => {
         isPlanCompleted: p.isCompleted,
       };
     }),
-  ]
-    .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+  ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 
   const seenBooks = new Set();
   const activities = [];
-  
+
   for (const act of allActivities) {
     if (activities.length >= 3) break;
-    
-    if (act.type === 'plan') {
+
+    if (act.type === "plan") {
       activities.push(act);
     } else {
       const bookKey = act.book.toLowerCase();
@@ -512,7 +782,11 @@ export const getRecentActivity = async (userId, limit = 10) => {
     }
   }
 
-  return { status: 200, message: "Recent activity fetched successfully", data: serializeBigInt(activities) };
+  return {
+    status: 200,
+    message: "Recent activity fetched successfully",
+    data: serializeBigInt(activities),
+  };
 };
 
 export const deleteVerseExplanation = async (data, userId) => {
@@ -521,4 +795,4 @@ export const deleteVerseExplanation = async (data, userId) => {
 
   await prisma.verseExplanation.delete({ where: { id: BigInt(id) } });
   return { status: 200, message: "Verse explanation deleted successfully" };
-}
+};

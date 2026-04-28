@@ -42,6 +42,28 @@ export const login = async (req, res) => {
   }
 };
 
+export const googleLogin = async (req, res) => {
+  try {
+    const deviceInfo = req.body.deviceInfo || null;
+    const result = await authService.googleLogin(req.body, deviceInfo);
+    return res.status(result.status).json(formatApiResponse(result));
+  } catch (error) {
+    console.error("Google Login error:", error);
+    return res.status(500).json(formatApiResponse({ status: 500, message: "An error occurred during Google login" }));
+  }
+};
+
+export const completeGoogleRegistration = async (req, res) => {
+  try {
+    const deviceInfo = req.body.deviceInfo || null;
+    const result = await authService.completeGoogleRegistration(req.body, deviceInfo);
+    return res.status(result.status).json(formatApiResponse(result));
+  } catch (error) {
+    console.error("Complete Google Registration error:", error);
+    return res.status(500).json(formatApiResponse({ status: 500, message: "An error occurred during registration" }));
+  }
+};
+
 export const loginFailed = async (req, res) => {
   try {
     const result = await authService.logFailedLogin(req.body);

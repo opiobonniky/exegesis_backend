@@ -2,6 +2,204 @@ import { prisma } from "../../config/db.js";
 import bcrypt from "bcryptjs";
 import { generateToken, verifyToken, generateSixDigitCode } from "../../utils/helpers.js";
 import { emailTemplates } from "../../utils/emailTemplates.js";
+import { OAuth2Client } from "google-auth-library";
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+export const googleLogin = async (data, deviceInfo = null) => {
+  const { idToken, email, firstName, lastName, photoUrl } = data;
+
+  if (!idToken) {
+    return { status: 400, message: "Google ID token is required" };
+  }
+
+  let googleUser;
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    googleUser = ticket.getPayload();
+  } catch (error) {
+    console.error("Google token verification failed:", error.message);
+    return { status: 401, message: "Invalid Google token" };
+  }
+
+  if (!googleUser) {
+    return { status: 401, message: "Invalid Google credentials" };
+  }
+
+  const googleEmail = googleUser.email;
+  const googleFirstName = googleUser.given_name || firstName || "Google";
+  const googleLastName = googleUser.family_name || lastName || "User";
+  const googlePhoto = googleUser.picture || photoUrl || null;
+
+  const existingUser = await prisma.systemUser.findFirst({
+    where: { email: googleEmail.toLowerCase() },
+  });
+
+  if (existingUser) {
+    const role = await prisma.role.findFirst({ where: { id: existingUser.userRole } });
+
+    const now = new Date();
+    await prisma.systemUser.update({
+      where: { id: existingUser.id },
+      data: {
+        lastLogin: now,
+        isLoggedIn: true,
+        loginCount: (existingUser.loginCount || 0n) + 1n,
+      },
+    });
+
+    if (deviceInfo) {
+      await logSuccessfulLogin(existingUser, deviceInfo);
+    }
+
+    const token = generateToken(existingUser);
+
+    return {
+      status: 200,
+      message: "Google login successful",
+      data: {
+        token,
+        tokenType: "Bearer",
+        username: existingUser.username,
+        email: existingUser.email,
+        firstName: existingUser.firstName,
+        lastName: existingUser.lastName,
+        profilePhotoUrl: existingUser.profilePhotoUrl,
+        userRole: Number(existingUser.userRole),
+        roleName: role?.roleName || "Member",
+      },
+    };
+  }
+
+  return {
+    status: 201,
+    message: "New Google user - please complete registration",
+    data: {
+      needsRegistration: true,
+      googleId: googleUser.sub,
+      email: googleEmail.toLowerCase(),
+      firstName: googleFirstName,
+      lastName: googleLastName,
+      photoUrl: googlePhoto,
+    },
+  };
+};
+
+export const completeGoogleRegistration = async (data, deviceInfo = null) => {
+  const { googleId, username, password, firstName, lastName, phoneNumber, gender, email, photoUrl } = data;
+
+  if (!googleId) {
+    return { status: 400, message: "Google ID is required" };
+  }
+  if (!username) {
+    return { status: 400, message: "Username is required" };
+  }
+  if (!password) {
+    return { status: 400, message: "Password is required" };
+  }
+
+  const existingUsername = await prisma.systemUser.findFirst({ where: { username: username.toLowerCase() } });
+  if (existingUsername) {
+    return { status: 401, message: "Username already exists, try another one" };
+  }
+
+  const userEmail = email ? email.toLowerCase() : `${googleId}@google.com`;
+  
+  const existingEmail = await prisma.systemUser.findFirst({ where: { email: userEmail } });
+  if (existingEmail) {
+    if (existingEmail.email.endsWith('@google.com')) {
+      const updatedUser = await prisma.systemUser.update({
+        where: { id: existingEmail.id },
+        data: {
+          username: username.toLowerCase(),
+          firstName: firstName || existingEmail.firstName,
+          lastName: lastName || existingEmail.lastName,
+          profilePhotoUrl: photoUrl || existingEmail.profilePhotoUrl,
+        },
+      });
+      
+      const role = await prisma.role.findFirst({ where: { id: updatedUser.userRole } });
+      await prisma.systemUser.update({
+        where: { id: updatedUser.id },
+        data: { isLoggedIn: true, loginCount: (updatedUser.loginCount || 0n) + 1n, lastLogin: new Date() },
+      });
+
+      const token = generateToken(updatedUser);
+      return {
+        status: 200,
+        message: "Login successful",
+        data: {
+          token,
+          tokenType: "Bearer",
+          username: updatedUser.username,
+          email: updatedUser.email,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          profilePhotoUrl: updatedUser.profilePhotoUrl,
+          userRole: Number(updatedUser.userRole),
+          roleName: role?.roleName || "Member",
+        },
+      };
+    }
+    return { status: 401, message: "Email already exists" };
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 12);
+
+  const user = await prisma.systemUser.create({
+    data: {
+      username: username.toLowerCase(),
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      firstName: firstName || "Google",
+      lastName: lastName || "User",
+      phoneNumber: phoneNumber || "",
+      gender: gender || "Not specified",
+      userRole: 2n,
+      emailVerified: true,
+      status: true,
+      loginCount: 0n,
+      profilePhotoUrl: photoUrl || null,
+    },
+  });
+
+  const role = await prisma.role.findFirst({ where: { id: user.userRole } });
+
+  const now = new Date();
+  await prisma.systemUser.update({
+    where: { id: user.id },
+    data: {
+      lastLogin: now,
+      isLoggedIn: true,
+      loginCount: 1n,
+    },
+  });
+
+  if (deviceInfo) {
+    await logSuccessfulLogin(user, deviceInfo);
+  }
+
+  const token = generateToken(user);
+
+  return {
+    status: 200,
+    message: "Account created successfully",
+    data: {
+      token,
+      tokenType: "Bearer",
+      username: user.username,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      profilePhotoUrl: user.profilePhotoUrl,
+      userRole: Number(user.userRole),
+      roleName: role?.roleName || "Member",
+    },
+  };
+};
 
 export const register = async (data) => {
   const { username, email, password, firstName, lastName, phoneNumber, dateOfBirth, gender, userRole } = data;

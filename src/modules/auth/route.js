@@ -8,6 +8,8 @@ router.post("/register", authController.register);
 router.post("/verify-account", authController.verifyAccount);
 router.post("/verify-code", authController.verifyCode);
 router.post("/login", authController.login);
+router.post("/google-login", authController.googleLogin);
+router.post("/complete-google-registration", authController.completeGoogleRegistration);
 router.post("/login-failed", authController.loginFailed);
 router.post("/refresh", authenticate, authController.refresh);
 router.post("/logout", authenticate, authController.logout);

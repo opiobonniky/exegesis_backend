@@ -17,7 +17,10 @@ export const googleLogin = async (data, deviceInfo = null) => {
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: [
+        process.env.GOOGLE_CLIENT_ID, // Android web client (app uses this)
+        process.env.GOOGLE_WEB_CLIENT_ID, // Web app OAuth client ID
+      ].filter(Boolean),
     });
     googleUser = ticket.getPayload();
   } catch (error) {

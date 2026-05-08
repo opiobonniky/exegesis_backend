@@ -126,3 +126,33 @@ export const deleteDailyVerse = async (req, res) => {
     return res.status(500).json(formatApiResponse({ status: 500, message: "Error deleting daily verse: " + error.message }));
   }
 };
+
+export const addDailyDevotion = async (req, res) => {
+  try {
+    const result = await adminService.addDailyDevotion(req.body, req.user.id);
+    return res.status(result.status).json(formatApiResponse(result));
+  } catch (error) {
+    console.error("Add daily devotion error:", error);
+    return res.status(500).json(formatApiResponse({ status: 500, message: "Error adding daily devotion: " + error.message }));
+  }
+};
+
+export const getAllDailyDevotions = async (req, res) => {
+  try {
+    const result = await adminService.getAllDailyDevotions(req.body);
+    return res.status(result.status).json(formatApiResponse(result));
+  } catch (error) {
+    console.error("Get all daily devotions error:", error);
+    return res.status(500).json(formatApiResponse({ status: 500, message: "Error fetching daily devotions: " + error.message }));
+  }
+};
+
+export const deleteDailyDevotion = async (req, res) => {
+  try {
+    const result = await adminService.deleteDailyDevotion(req.body);
+    return res.status(result.status).json(formatApiResponse(result));
+  } catch (error) {
+    console.error("Delete daily devotion error:", error);
+    return res.status(500).json(formatApiResponse({ status: 500, message: "Error deleting daily devotion: " + error.message }));
+  }
+};

@@ -51,6 +51,7 @@ model SystemUser {
   verifications      Verification[]
   messages           Message[]
   dailyVersesCreated DailyVerse[]       @relation("DailyVerseCreator")
+  dailyDevotionsCreated DailyDevotion[] @relation("DailyDevotionCreator")
   journalEntries     JournalEntry[]
 
   @@map("system_users")
@@ -114,9 +115,12 @@ model DailyVerse {
   bookName    String    @map("book_name")
   chapter     BigInt
   verseNumber BigInt    @map("verse_number")
+  bibleVersion String?  @map("bible_version")
   displayDate DateTime  @map("display_date")
   displayTime DateTime? @map("display_time")
-  reflection  String?
+  reflection  String?   @map("reflection")
+  explanation String?   @map("explanation")
+  learnMore   String?   @map("learn_more")
   createdBy   String    @map("created_by")
   createdOn   DateTime  @default(now()) @map("created_on")
   updatedBy   String?   @map("updated_by")
@@ -126,6 +130,26 @@ model DailyVerse {
   user SystemUser? @relation("DailyVerseCreator", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@map("daily_verse")
+}
+
+model DailyDevotion {
+  id          BigInt    @id @default(autoincrement())
+  title       String
+  content     String    @db.Text
+  bookName    String?   @map("book_name")
+  chapter     BigInt?   
+  verseNumber BigInt?   @map("verse_number")
+  displayDate DateTime  @map("display_date")
+  displayTime DateTime? @map("display_time")
+  createdBy   String    @map("created_by")
+  createdOn   DateTime  @default(now()) @map("created_on")
+  updatedBy   String?   @map("updated_by")
+  updatedOn   DateTime  @updatedAt @map("updated_on")
+  isPublished Boolean   @default(false) @map("is_published")
+
+  user SystemUser? @relation("DailyDevotionCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@map("daily_devotion")
 }
 
 model ReadHistory {

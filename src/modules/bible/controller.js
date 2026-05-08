@@ -161,6 +161,36 @@ export const getTodaysVerse = async (req, res) => {
   }
 };
 
+export const getTodaysDevotion = async (req, res) => {
+  try {
+    const result = await bibleService.getTodaysDevotion();
+    return res.status(result.status).json(formatApiResponse(result));
+  } catch (error) {
+    console.error("Get today's devotion error:", error);
+    return res.status(500).json(formatApiResponse({ status: 500, message: "Error getting today's devotion: " + error.message }));
+  }
+};
+
+export const getAllDailyDevotions = async (req, res) => {
+  try {
+    const result = await bibleService.getAllDailyDevotionsPublic(req.body);
+    return res.status(result.status).json(formatApiResponse(result));
+  } catch (error) {
+    console.error("Get all daily devotions error:", error);
+    return res.status(500).json(formatApiResponse({ status: 500, message: "Error getting daily devotions: " + error.message }));
+  }
+};
+
+export const getDevotionByDate = async (req, res) => {
+  try {
+    const result = await bibleService.getDevotionByDate(req.body);
+    return res.status(result.status).json(formatApiResponse(result));
+  } catch (error) {
+    console.error("Get devotion by date error:", error);
+    return res.status(500).json(formatApiResponse({ status: 500, message: "Error getting devotion by date: " + error.message }));
+  }
+};
+
 export const getHomeStats = async (req, res) => {
   try {
     const result = await bibleService.getHomeStats(req.user.id);

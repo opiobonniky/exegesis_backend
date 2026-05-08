@@ -400,9 +400,10 @@ export const addVerseExplanation = async (data, userId) => {
       message: "bookName, chapter, and verseNumber are required",
     };
 
-  const promptIdsJson = promptIds && Array.isArray(promptIds) 
-    ? JSON.stringify(promptIds) 
-    : promptIds;
+  const promptIdsJson =
+    promptIds && Array.isArray(promptIds)
+      ? JSON.stringify(promptIds)
+      : promptIds;
 
   let verseExplanation;
   if (id) {
@@ -428,7 +429,13 @@ export const addVerseExplanation = async (data, userId) => {
           verseNumber: BigInt(verseNumber),
         },
       },
-      update: { explanation, learnMore, bibleVersion, promptIds: promptIdsJson, updatedBy: userId },
+      update: {
+        explanation,
+        learnMore,
+        bibleVersion,
+        promptIds: promptIdsJson,
+        updatedBy: userId,
+      },
       create: {
         bookName,
         chapter: BigInt(chapter),
@@ -639,6 +646,174 @@ export const getTodaysVerse = async () => {
     status: 200,
     message: "Today's verse fetched successfully",
     data: serializeBigInt(dailyVerse),
+  };
+};
+
+export const getTodaysDevotion = async () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let dailyDevotion = await prisma.dailyDevotion.findFirst({
+    where: { displayDate: { gte: today }, isPublished: true },
+    orderBy: { displayDate: "asc" },
+  });
+
+  if (!dailyDevotion) {
+    dailyDevotion = await prisma.dailyDevotion.findFirst({
+      where: { isPublished: true },
+      orderBy: { displayDate: "desc" },
+    });
+  }
+
+  if (!dailyDevotion)
+    return { status: 404, message: "No daily devotion found for today" };
+
+  const serializeBigInt = (val) => {
+    if (val === null || val === undefined) return val;
+    if (typeof val === "bigint") return Number(val);
+    if (Array.isArray(val)) return val.map(serializeBigInt);
+    if (typeof val === "object") {
+      return Object.fromEntries(
+        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)]),
+      );
+    }
+    return val;
+  };
+
+  return {
+    status: 200,
+    message: "Today's devotion fetched successfully",
+    data: serializeBigInt(dailyDevotion),
+  };
+};
+
+export const getDevotionByDate = async (data) => {
+  const { date } = data;
+  if (!date) {
+    return { status: 400, message: "Date is required" };
+  }
+
+  // We want to get devotions for the given date (start of day to end of day)
+  const startDate = new Date(date);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(date);
+  endDate.setHours(23, 59, 59, 999);
+
+  const whereClause = {
+    displayDate: {
+      gte: startDate,
+      lte: endDate,
+    },
+    isPublished: true,
+  };
+
+  const [devotions, totalElements] = await Promise.all([
+    prisma.dailyDevotion.findMany({
+      where: whereClause,
+      orderBy: { displayDate: "asc" },
+      take: 1, // We only need the first one for the day
+    }),
+    prisma.dailyDevotion.count({ where: whereClause }),
+  ]);
+
+  if (devotions.length === 0) {
+    return { status: 404, message: "No devotion found for the given date" };
+  }
+
+  const serializeBigInt = (val) => {
+    if (val === null || val === undefined) return val;
+    if (typeof val === "bigint") return Number(val);
+    if (val instanceof Date) return val.toISOString();
+    if (Array.isArray(val)) return val.map(serializeBigInt);
+    if (typeof val === "object") {
+      return Object.fromEntries(
+        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)]),
+      );
+    }
+    return val;
+  };
+
+  const content = serializeBigInt(devotions[0]);
+
+  return {
+    status: 200,
+    message: "Devotion fetched successfully",
+    data: content,
+  };
+};
+
+export const getAllDailyDevotionsPublic = async (data) => {
+  const {
+    page = 0,
+    size = 12,
+    startDate,
+    endDate,
+    smartDefault,
+    futureDays = 2,
+  } = data || {};
+  const pageNum = parseInt(page) || 0;
+  const pageSize = Math.min(parseInt(size) || 12, 50);
+
+  const whereClause = { isPublished: true };
+
+  if (startDate || endDate) {
+    whereClause.displayDate = {};
+    if (startDate) whereClause.displayDate.gte = new Date(startDate);
+    if (endDate) whereClause.displayDate.lte = new Date(endDate);
+  }
+
+  if (smartDefault) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const futureDate = new Date(today);
+    futureDate.setDate(futureDate.getDate() + (futureDays || 2));
+
+    whereClause.OR = [
+      { displayDate: { gte: today, lte: futureDate }, isPublished: true },
+      { displayDate: { lt: today }, isPublished: true },
+    ];
+  }
+
+  const [devotions, totalElements] = await Promise.all([
+    prisma.dailyDevotion.findMany({
+      where: whereClause,
+      orderBy: { displayDate: "desc" },
+      skip: pageNum * pageSize,
+      take: pageSize,
+    }),
+    prisma.dailyDevotion.count({ where: whereClause }),
+  ]);
+
+  const serializeBigInt = (val) => {
+    if (val === null || val === undefined) return val;
+    if (typeof val === "bigint") return Number(val);
+    if (val instanceof Date) return val.toISOString();
+    if (Array.isArray(val)) return val.map(serializeBigInt);
+    if (typeof val === "object") {
+      return Object.fromEntries(
+        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)]),
+      );
+    }
+    return val;
+  };
+
+  const content = serializeBigInt(devotions);
+  const totalPages = Math.ceil(totalElements / pageSize);
+
+  return {
+    status: 200,
+    message: "Daily devotions fetched successfully",
+    data: {
+      content,
+      currentPage: pageNum,
+      pageSize,
+      totalElements,
+      totalPages,
+      hasNext: pageNum < totalPages - 1,
+      hasPrevious: pageNum > 0,
+      isFirst: pageNum === 0,
+      isLast: pageNum >= totalPages - 1,
+    },
   };
 };
 

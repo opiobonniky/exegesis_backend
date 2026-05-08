@@ -371,7 +371,7 @@ export const deleteActivity = async (data) => {
 };
 
 export const addDailyVerse = async (data, adminId) => {
-  const { id, bookName, chapter, verseNumber, displayDate, displayTime, reflection, published } = data;
+  const { id, bookName, chapter, verseNumber, bibleVersion, displayDate, displayTime, reflection, explanation, learnMore, published } = data;
 
   if (!bookName || !chapter || !verseNumber || !displayDate) {
     return { status: 400, message: "bookName, chapter, verseNumber, and displayDate are required" };
@@ -385,9 +385,12 @@ export const addDailyVerse = async (data, adminId) => {
         bookName,
         chapter: BigInt(chapter),
         verseNumber: BigInt(verseNumber),
+        bibleVersion: bibleVersion || 'KJV',
         displayDate: new Date(displayDate),
         displayTime: displayTime ? new Date(displayTime) : null,
         reflection,
+        explanation,
+        learnMore,
         isPublished: published ?? true,
         updatedBy: adminId,
       },
@@ -398,9 +401,12 @@ export const addDailyVerse = async (data, adminId) => {
         bookName,
         chapter: BigInt(chapter),
         verseNumber: BigInt(verseNumber),
+        bibleVersion: bibleVersion || 'KJV',
         displayDate: new Date(displayDate),
         displayTime: displayTime ? new Date(displayTime) : null,
         reflection,
+        explanation,
+        learnMore,
         createdBy: adminId,
         isPublished: published ?? true,
       },
@@ -516,4 +522,139 @@ export const deleteDailyVerse = async (data) => {
 
   await prisma.dailyVerse.delete({ where: { id: BigInt(targetId) } });
   return { status: 200, message: "Daily verse deleted successfully" };
+};
+
+// ── Daily Devotion CRUD ─────────────────────────────────────────────────────────
+
+export const addDailyDevotion = async (data, adminId) => {
+  const { id, title, content, bookName, chapter, verseNumber, displayDate, displayTime, published } = data;
+
+  if (!title || !content || !displayDate) {
+    return { status: 400, message: "title, content, and displayDate are required" };
+  }
+
+  let dailyDevotion;
+  if (id) {
+    dailyDevotion = await prisma.dailyDevotion.update({
+      where: { id: BigInt(id) },
+      data: {
+        title,
+        content,
+        bookName: bookName || null,
+        chapter: chapter ? BigInt(chapter) : null,
+        verseNumber: verseNumber ? BigInt(verseNumber) : null,
+        displayDate: new Date(displayDate),
+        displayTime: displayTime ? new Date(displayTime) : null,
+        isPublished: published ?? true,
+        updatedBy: adminId,
+      },
+    });
+  } else {
+    dailyDevotion = await prisma.dailyDevotion.create({
+      data: {
+        title,
+        content,
+        bookName: bookName || null,
+        chapter: chapter ? BigInt(chapter) : null,
+        verseNumber: verseNumber ? BigInt(verseNumber) : null,
+        displayDate: new Date(displayDate),
+        displayTime: displayTime ? new Date(displayTime) : null,
+        createdBy: adminId,
+        isPublished: published ?? true,
+      },
+    });
+  }
+
+  const serializeBigInt = (val) => {
+    if (val === null || val === undefined) return val;
+    if (typeof val === "bigint") return Number(val);
+    if (Array.isArray(val)) return val.map(serializeBigInt);
+    if (typeof val === "object") {
+      return Object.fromEntries(
+        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)])
+      );
+    }
+    return val;
+  };
+
+  const msg = id ? "Daily devotion updated successfully" : "Daily devotion added successfully";
+  return { status: 200, message: msg, data: serializeBigInt(dailyDevotion) };
+};
+
+export const getAllDailyDevotions = async (data) => {
+  const { page = 0, size = 12, startDate, endDate, smartDefault, futureDays = 2 } = data || {};
+  const pageNum = parseInt(page) || 0;
+  const pageSize = Math.min(parseInt(size) || 12, 50);
+
+  const whereClause = {};
+
+  if (smartDefault) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const futureDate = new Date(today);
+    futureDate.setDate(futureDate.getDate() + (futureDays || 2));
+
+    whereClause.OR = [
+      { displayDate: { gte: today, lte: futureDate }, isPublished: true },
+      { displayDate: { lt: today }, isPublished: true },
+    ];
+  } else {
+    if (startDate) {
+      whereClause.displayDate = { ...whereClause.displayDate, gte: new Date(startDate) };
+    }
+    if (endDate) {
+      whereClause.displayDate = { ...whereClause.displayDate, lte: new Date(endDate) };
+    }
+  }
+
+  const totalElements = await prisma.dailyDevotion.count({ where: whereClause });
+  const totalPages = Math.ceil(totalElements / pageSize);
+
+  const rawContent = await prisma.dailyDevotion.findMany({
+    where: whereClause,
+    orderBy: { displayDate: "desc" },
+    skip: pageNum * pageSize,
+    take: pageSize,
+  });
+
+  const serializeBigInt = (val) => {
+    if (val === null || val === undefined) return val;
+    if (typeof val === "bigint") return Number(val);
+    if (val instanceof Date) return val.toISOString();
+    if (Array.isArray(val)) return val.map(serializeBigInt);
+    if (typeof val === "object") {
+      return Object.fromEntries(
+        Object.entries(val).map(([k, v]) => [k, serializeBigInt(v)])
+      );
+    }
+    return val;
+  };
+  const content = serializeBigInt(rawContent);
+
+  return {
+    status: 200,
+    message: "Daily devotions fetched successfully",
+    data: {
+      content,
+      currentPage: pageNum,
+      pageSize,
+      totalElements,
+      totalPages,
+      hasNext: pageNum < totalPages - 1,
+      hasPrevious: pageNum > 0,
+      isFirst: pageNum === 0,
+      isLast: pageNum >= totalPages - 1,
+    },
+  };
+};
+
+export const deleteDailyDevotion = async (data) => {
+  const { devotionId, id } = data;
+  const targetId = devotionId || id;
+  if (!targetId) {
+    return { status: 400, message: "Devotion ID is required" };
+  }
+
+  await prisma.dailyDevotion.delete({ where: { id: BigInt(targetId) } });
+  return { status: 200, message: "Daily devotion deleted successfully" };
 };
